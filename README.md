@@ -1,2 +1,3 @@
 # cocos-requet
-cocos requet client
+
+axios 核心 xhr 实现，用于 cocos creator 使用。

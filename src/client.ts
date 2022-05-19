@@ -15,7 +15,6 @@ import {
   isArrayBufferView,
   isURLSearchParams,
   isObject,
-  isFileList,
 } from './helper';
 
 export type Method =
@@ -47,7 +46,7 @@ export interface RequetConstructor {
 
 export type RequetParams = Record<string, any>;
 
-export interface ReqeustConfig extends RequetConstructor {
+export interface RequestConfig extends RequetConstructor {
   url: string;
   method?: Method;
   params?: RequetParams;
@@ -60,12 +59,12 @@ export interface ReqeustResponse<D = any> {
   status: number;
   statusText: string;
   headers: RequetHeaders;
-  config: ReqeustConfig;
+  config: RequestConfig;
   request?: any;
 }
 
-export type ParamsRequestOptions = Omit<ReqeustConfig, 'method' | 'url' | 'params' | 'data'>;
-export type DataRequestOptions = Omit<ReqeustConfig, 'method' | 'url' | 'data'>;
+export type ParamsRequestOptions = Omit<RequestConfig, 'method' | 'url' | 'params' | 'data'>;
+export type DataRequestOptions = Omit<RequestConfig, 'method' | 'url' | 'data'>;
 
 class InterceptorManager<T = any> {
   public handlers: Array<{
@@ -89,65 +88,89 @@ class InterceptorManager<T = any> {
   }
 }
 
-export default class Client {
+function transformRequest(data: RequetParams, headers: RequetHeaders) {
+  normalizeHeaderName(headers, 'Accept');
+  normalizeHeaderName(headers, 'Content-Type');
+
+  if (
+    !data ||
+    isFormData(data) ||
+    isArrayBuffer(data) ||
+    isBuffer(data) ||
+    isStream(data) ||
+    isFile(data) ||
+    isBlob(data)
+  ) {
+    return data;
+  }
+  if (isArrayBufferView(data)) {
+    return data.buffer;
+  }
+  if (isURLSearchParams(data)) {
+    setContentTypeIfUnset(headers, 'application/x-www-form-urlencoded;charset=utf-8');
+    return data.toString();
+  }
+
+  const isObjectPayload = isObject(data);
+  const contentType = String((headers && headers['Content-Type']) || '');
+
+  // todo 处理特殊数据
+  // application/x-www-form-urlencoded
+  // multipart/form-data
+  // file
+
+  if (isObjectPayload || contentType.indexOf('application/json') !== -1) {
+    setContentTypeIfUnset(headers, 'application/json');
+    return stringifySafely(data);
+  }
+
+  return data;
+}
+
+export class Client {
   public defaultOptions: RequetConstructor = {
     headers: {
       Accept: 'application/json, text/plain, */*',
     },
   };
   public interceptors: {
-    request: InterceptorManager<ReqeustConfig>;
+    request: InterceptorManager<RequestConfig>;
     response: InterceptorManager<ReqeustResponse>;
   };
 
   constructor(options: RequetConstructor) {
     Object.assign(this.defaultOptions, options);
     this.interceptors = {
-      request: new InterceptorManager<ReqeustConfig>(),
+      request: new InterceptorManager<RequestConfig>(),
       response: new InterceptorManager<ReqeustResponse>(),
     };
+
+    this.interceptors.request.use((config) => {
+      if (!config.headers) {
+        config.headers = {};
+      }
+      if (config.responseType === 'json') {
+        config.headers['Accept'] = 'application/json';
+        config.headers['Content-Type'] = 'application/json';
+      }
+      config.data = transformRequest(config.data || {}, config.headers);
+      return config;
+    });
+
+    this.interceptors.response.use(
+      (response) => {
+        if (response.config.responseType === 'json' && response.data) {
+          response.data = JSON.parse(response.data);
+        }
+        return response;
+      },
+      (error) => {
+        throw error;
+      }
+    );
   }
 
-  _transformRequest(data: RequetParams, headers: RequetHeaders) {
-    normalizeHeaderName(headers, 'Accept');
-    normalizeHeaderName(headers, 'Content-Type');
-
-    if (
-      !data ||
-      isFormData(data) ||
-      isArrayBuffer(data) ||
-      isBuffer(data) ||
-      isStream(data) ||
-      isFile(data) ||
-      isBlob(data)
-    ) {
-      return data;
-    }
-    if (isArrayBufferView(data)) {
-      return data.buffer;
-    }
-    if (isURLSearchParams(data)) {
-      setContentTypeIfUnset(headers, 'application/x-www-form-urlencoded;charset=utf-8');
-      return data.toString();
-    }
-
-    const isObjectPayload = isObject(data);
-    const contentType = String((headers && headers['Content-Type']) || '');
-
-    // todo 处理特殊数据
-    // application/x-www-form-urlencoded
-    // multipart/form-data
-    // file
-
-    if (isObjectPayload || contentType.indexOf('application/json') !== -1) {
-      setContentTypeIfUnset(headers, 'application/json');
-      return stringifySafely(data);
-    }
-
-    return data;
-  }
-
-  async _request<D = any>(mergeConfig: ReqeustConfig): Promise<ReqeustResponse<D>> {
+  async _request<D = any>(mergeConfig: RequestConfig): Promise<ReqeustResponse<D>> {
     const {
       baseURL,
       method,
@@ -159,10 +182,6 @@ export default class Client {
       timeout,
     } = mergeConfig;
     const requestHeaders = { ...headers };
-    if (responseType === 'json') {
-      requestHeaders['Accept'] = 'application/json';
-      requestHeaders['Content-Type'] = 'application/json';
-    }
     return new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       const fullPath = buildFullPath(baseURL || '', url);
@@ -179,19 +198,6 @@ export default class Client {
 
       xhr.open((method || 'get').toUpperCase(), requestUrl, true);
 
-      const berforeResolve = (reqeustResponse: ReqeustResponse<D>) => {
-        return this.interceptors.response.handlers.reduce((promise, handler) => {
-          return promise.then((config) => {
-            if (handler) {
-              return Promise.resolve(handler.fulfilled(config))
-                .then((res) => res || config)
-                .catch((error) => handler.rejected(error));
-            }
-            return config;
-          });
-        }, Promise.resolve(reqeustResponse));
-      };
-
       function onloadend() {
         const { status, statusText, responseText, response } = xhr;
         const responseData =
@@ -204,9 +210,9 @@ export default class Client {
           headers: parseHeaders(xhr.getAllResponseHeaders()),
           config: mergeConfig,
           request: xhr,
-          data: responseType === 'json' ? JSON.parse(responseData) : responseData,
+          data: responseData,
         };
-        berforeResolve(reqeustResponse).then((res) => resolve(res));
+        resolve(reqeustResponse);
       }
 
       if ('onloadend' in xhr) {
@@ -241,8 +247,6 @@ export default class Client {
         }, 0);
       };
 
-      const sendData = this._transformRequest(data || {}, requestHeaders);
-
       if ('setRequestHeader' in xhr) {
         Object.entries(requestHeaders || {}).forEach(([key, header]) => {
           if (typeof data === 'undefined' && key.toLowerCase() === 'content-type') {
@@ -261,15 +265,15 @@ export default class Client {
         xhr.responseType = responseType;
       }
 
-      xhr.send(sendData);
+      xhr.send(data || (null as any));
     });
   }
 
-  async request<D = any>(reqeustConfig: ReqeustConfig): Promise<ReqeustResponse<D>> {
+  async request<D = any>(reqeustConfig: RequestConfig): Promise<ReqeustResponse<D>> {
     // 拦截请求
-    const berforeRequest = (config: ReqeustConfig) => {
+    const berforeRequest = (config: RequestConfig) => {
       return this.interceptors.request.handlers.reduce(
-        (promise: Promise<ReqeustConfig>, handler) => {
+        (promise: Promise<RequestConfig>, handler) => {
           if (!handler) return promise;
           return promise.then(
             (config) => handler.fulfilled(config),
