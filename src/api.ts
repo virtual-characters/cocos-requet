@@ -1,5 +1,10 @@
 import { Client } from './client';
-import type { RequetHeaders, RequestConfig, ReqeustResponse, ResponseType } from './client';
+import type {
+  RequetHeaders,
+  RequestConfig,
+  ReqeustResponse,
+  ResponseType,
+} from './client';
 
 type RequestError = any;
 /** 去除可索引签名 */
@@ -13,7 +18,16 @@ export type RequestPath = `${Uppercase<RequestOptions['method']>} ${string}`;
 // 选项配置
 export type RequestOptions = {
   path: string;
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'HEAD' | 'OPTIONS' | 'CONNECT' | 'TRACE' | 'PATCH';
+  method:
+    | 'GET'
+    | 'POST'
+    | 'PUT'
+    | 'DELETE'
+    | 'HEAD'
+    | 'OPTIONS'
+    | 'CONNECT'
+    | 'TRACE'
+    | 'PATCH';
   headers?: RequetHeaders;
 };
 
@@ -25,7 +39,9 @@ export type RequestFunction<P = Record<string, any> | void, R = any> = (
 
 export type APIConfig = RequestPath | RequestOptions | RequestFunction;
 
-export type RequestHandler = (config?: RequestConfig) => RequestConfig | Promise<RequestConfig>;
+export type RequestHandler = (
+  config?: RequestConfig
+) => RequestConfig | Promise<RequestConfig>;
 export type ResponseHandler = (
   response?: ReqeustResponse
 ) => ReqeustResponse | Promise<ReqeustResponse>;
@@ -60,7 +76,8 @@ export type CreateRequestClient<T extends APISchema> = {
   >;
 };
 
-const MATCH_METHOD = /^(GET|POST|PUT|DELETE|HEAD|OPTIONS|CONNECT|TRACE|PATCH)\s+/;
+const MATCH_METHOD =
+  /^(GET|POST|PUT|DELETE|HEAD|OPTIONS|CONNECT|TRACE|PATCH)\s+/;
 const MATCH_PATH_PARAMS = /:(\w+)/g;
 const USE_DATA_METHODS = ['POST', 'PUT', 'PATCH'];
 
@@ -134,20 +151,17 @@ export function createRequestClient<T extends APISchema>(
 
   // 拦截请求
   requestConfig.responseHandlers?.forEach((responseHandler) => {
-    client.interceptors.response.use(
-      (response) => {
-        return responseHandler(response);
-      },
-      (error) => {
-        return Promise.reject(error);
-      }
-    );
+    client.interceptors.response.use(responseHandler, (error) => {
+      return Promise.reject(error);
+    });
   });
   // 错误处理
   client.interceptors.response.use(
     (res) => res,
     (error: RequestError) => {
-      const requestError = requestConfig.errorHandler ? requestConfig.errorHandler(error) : error;
+      const requestError = requestConfig.errorHandler
+        ? requestConfig.errorHandler(error)
+        : error;
       return Promise.reject(requestError);
     }
   );

@@ -5,7 +5,9 @@
  * @returns {String} The String freed of excess whitespace
  */
 export function trim(str: string) {
-  return str.trim ? str.trim() : str.replace(/^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g, '');
+  return str.trim
+    ? str.trim()
+    : str.replace(/^[\s\uFEFF\xA0]+|[\s\uFEFF\xA0]+$/g, '');
 }
 
 const kindOf = (function (cache) {
@@ -323,7 +325,10 @@ export function stringifySafely(rawValue: any) {
 
 export function normalizeHeaderName(headers: Headers, normalizedName: string) {
   Object.keys(headers).forEach((name) => {
-    if (name !== normalizedName && name.toUpperCase() === normalizedName.toUpperCase()) {
+    if (
+      name !== normalizedName &&
+      name.toUpperCase() === normalizedName.toUpperCase()
+    ) {
       headers[normalizedName] = headers[name];
       delete headers[name];
     }

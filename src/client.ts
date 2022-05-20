@@ -63,7 +63,10 @@ export interface ReqeustResponse<D = any> {
   request?: any;
 }
 
-export type ParamsRequestOptions = Omit<RequestConfig, 'method' | 'url' | 'params' | 'data'>;
+export type ParamsRequestOptions = Omit<
+  RequestConfig,
+  'method' | 'url' | 'params' | 'data'
+>;
 export type DataRequestOptions = Omit<RequestConfig, 'method' | 'url' | 'data'>;
 
 class InterceptorManager<T = any> {
@@ -107,7 +110,10 @@ function transformRequest(data: RequetParams, headers: RequetHeaders) {
     return data.buffer;
   }
   if (isURLSearchParams(data)) {
-    setContentTypeIfUnset(headers, 'application/x-www-form-urlencoded;charset=utf-8');
+    setContentTypeIfUnset(
+      headers,
+      'application/x-www-form-urlencoded;charset=utf-8'
+    );
     return data.toString();
   }
 
@@ -127,6 +133,21 @@ function transformRequest(data: RequetParams, headers: RequetHeaders) {
   return data;
 }
 
+const beforeSendRquestInterceptor = {
+  fulfilled(config: RequestConfig) {
+    if (!config.headers) {
+      config.headers = {};
+    }
+    if (config.responseType === 'json') {
+      config.headers['Accept'] = 'application/json';
+      config.headers['Content-Type'] = 'application/json';
+    }
+    config.data = transformRequest(config.data || {}, config.headers);
+    return config;
+  },
+  rejected: () => {},
+};
+
 export class Client {
   public defaultOptions: RequetConstructor = {
     headers: {
@@ -145,18 +166,6 @@ export class Client {
       response: new InterceptorManager<ReqeustResponse>(),
     };
 
-    this.interceptors.request.use((config) => {
-      if (!config.headers) {
-        config.headers = {};
-      }
-      if (config.responseType === 'json') {
-        config.headers['Accept'] = 'application/json';
-        config.headers['Content-Type'] = 'application/json';
-      }
-      config.data = transformRequest(config.data || {}, config.headers);
-      return config;
-    });
-
     this.interceptors.response.use(
       (response) => {
         if (response.config.responseType === 'json' && response.data) {
@@ -170,7 +179,9 @@ export class Client {
     );
   }
 
-  async _request<D = any>(mergeConfig: RequestConfig): Promise<ReqeustResponse<D>> {
+  async _request<D = any>(
+    mergeConfig: RequestConfig
+  ): Promise<ReqeustResponse<D>> {
     const {
       baseURL,
       method,
@@ -191,7 +202,10 @@ export class Client {
         xhr.timeout = timeout;
       }
 
-      if (protocol && ['http', 'https', 'file', 'blob'].indexOf(protocol) === -1) {
+      if (
+        protocol &&
+        ['http', 'https', 'file', 'blob'].indexOf(protocol) === -1
+      ) {
         reject(new Error('Unsupported protocol'));
         return;
       }
@@ -223,7 +237,10 @@ export class Client {
             return;
           }
 
-          if (xhr.status === 0 && !(xhr.responseURL && xhr.responseURL.indexOf('file:') === 0)) {
+          if (
+            xhr.status === 0 &&
+            !(xhr.responseURL && xhr.responseURL.indexOf('file:') === 0)
+          ) {
             return;
           }
           setTimeout(onloadend);
@@ -249,7 +266,10 @@ export class Client {
 
       if ('setRequestHeader' in xhr) {
         Object.entries(requestHeaders || {}).forEach(([key, header]) => {
-          if (typeof data === 'undefined' && key.toLowerCase() === 'content-type') {
+          if (
+            typeof data === 'undefined' &&
+            key.toLowerCase() === 'content-type'
+          ) {
             delete requestHeaders[key];
           } else {
             const headerContents = Array.isArray(header) ? header : [header];
@@ -269,26 +289,29 @@ export class Client {
     });
   }
 
-  async request<D = any>(reqeustConfig: RequestConfig): Promise<ReqeustResponse<D>> {
+  async request<D = any>(
+    reqeustConfig: RequestConfig
+  ): Promise<ReqeustResponse<D>> {
     // 拦截请求
     const berforeRequest = (config: RequestConfig) => {
-      return this.interceptors.request.handlers.reduce(
-        (promise: Promise<RequestConfig>, handler) => {
-          if (!handler) return promise;
-          return promise.then(
-            (config) => handler.fulfilled(config),
-            (error) => handler.rejected(error)
-          );
-        },
-        Promise.resolve(config)
-      );
+      const handlers = [
+        ...this.interceptors.request.handlers,
+        beforeSendRquestInterceptor,
+      ];
+      return handlers.reduce((promise: Promise<RequestConfig>, handler) => {
+        if (!handler) return promise;
+        return promise.then(
+          (config) => handler.fulfilled(config),
+          (error) => handler.rejected(error)
+        );
+      }, Promise.resolve(config));
     };
     // 拦截响应
     const afterRequest = (promise: Promise<ReqeustResponse<D>>) => {
       return this.interceptors.response.handlers.reduce(
         (request: Promise<ReqeustResponse<D>>, handler) => {
           if (!handler) {
-            return promise;
+            return request;
           }
           return request.then(
             (response) => handler.fulfilled(response),

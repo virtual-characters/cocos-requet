@@ -1,14 +1,20 @@
 lockfileVersion: 5.4
 
 specifiers:
+  crypto-js: ^4.1.1
   typescript: ^4.5.4
   vite: ^2.9.9
 
 devDependencies:
+  crypto-js: 4.1.1
   typescript: 4.6.4
   vite: 2.9.9
 
 packages:
+
+  /crypto-js/4.1.1:
+    resolution: {integrity: sha512-o2JlM7ydqd3Qk9CA0L4NL6mTzU2sdx96a+oOfPu8Mkl/PK51vSyoi8/rQ8NknZtk44vq15lmhAj9CIAGwgeWKw==}
+    dev: true
 
   /esbuild-android-64/0.14.39:
     resolution: {integrity: sha512-EJOu04p9WgZk0UoKTqLId9VnIsotmI/Z98EXrKURGb3LPNunkeffqQIkjS2cAvidh+OK5uVrXaIP229zK6GvhQ==}
